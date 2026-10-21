@@ -63,9 +63,13 @@ All state is shared globals:
   alternating frames.
 - Asteroid outlines are generated at construction with 8–13 random vertices; `rot` and
   `rotSpeed` are radians.
-- **The README is ahead of the code**: it advertises power-ups and a "estrella fugaz"
-  (shooting star) asteroid type that do not exist in `game.js`. Either implement them
-  or correct the README — don't assume they are already there.
+- **Palette**: every color comes from the `THEMES` map in `game.js`; `theme.<token>`
+  is the single source of truth (background, HUD text, power-up colors, overlays).
+  `D` toggles the theme and it is persisted in `localStorage` (`asteroids.theme`).
+  Skins may add `strokeLight` / `fillLight` / `flameLight` overrides for the light
+  theme; without them the base color is used.
+- The README is currently in sync with the code (power-ups and the "estrella fugaz"
+  are implemented). If you add a feature, update both in the same commit.
 
 ## Style
 
