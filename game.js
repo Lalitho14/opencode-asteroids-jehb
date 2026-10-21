@@ -311,6 +311,8 @@ class ShootingStar extends Asteroid {
 // propulsor. El mismo renderizador sirve para la nave en juego, la vista previa
 // del menú y los iconos de vidas del HUD. Las variantes "Light" son los colores
 // equivalentes en el tema claro (si faltan, se usa el color principal).
+// Dos campos opcionales ajustan el comportamiento: `scale` (tamaño propio de la
+// skin, por defecto 1) y `pointsMultiplier` (puntos que rinde cada impacto).
 
 function ellipsePoly(cx, cy, rx, ry, n = 12) {
   const pts = [];
@@ -400,6 +402,22 @@ const SKINS = [
     exhaust: [-11, 0],
     alpha: 0.75,
   },
+  {
+    id: 'morada',
+    name: 'Morada',
+    desc: 'Gigante y morada: dobla los puntos.',
+    hull: [[[20, 0], [-12, -9], [-7, 0], [-12, 9]]],
+    stroke: '#c084fc',
+    strokeLight: '#6d28d9',
+    fill: 'rgba(147, 51, 234, 0.3)',
+    fillLight: 'rgba(109, 40, 217, 0.22)',
+    flame: 'rgba(216, 180, 255, 0.9)',
+    flameLight: 'rgba(109, 40, 217, 0.75)',
+    exhaust: [-8, 0],
+    alpha: 1,
+    scale: 2,             // el doble de grande que la nave original
+    pointsMultiplier: 2,  // a cambio recibe el doble de puntos
+  },
 ];
 
 const BOOST_STROKE = '#8ff3ff';      // color de la nave con el power-up "Velocidad"
@@ -437,21 +455,36 @@ function setSkin(i) {
   saveSkinIndex(skinIndex);
 }
 
+// Colores de una skin adaptados al tema activo (trazo, relleno y llama)
+function skinPalette(skin) {
+  const light = theme.id === 'light';
+  return {
+    stroke: light && skin.strokeLight ? skin.strokeLight : skin.stroke,
+    fill:   light && skin.fillLight   ? skin.fillLight   : skin.fill,
+    flame:  light && skin.flameLight  ? skin.flameLight  : skin.flame,
+  };
+}
+
+// Tamaño propio de cada skin (la "Morada" es el doble de grande)
+function skinScale(skin) { return skin.scale || 1; }
+
+// Puntos que rinde cada impacto con la skin activa (la "Morada" dobla los puntos)
+function pointsMultiplier() { return SKINS[skinIndex].pointsMultiplier || 1; }
+
 // Dibuja la nave de una skin en el contexto actual, con el morro hacia +X.
 // Cada skin puede traer variantes para el tema claro (strokeLight, fillLight,
-// flameLight); si faltan se usa el color principal.
+// flameLight); si faltan se usa el color principal. El parámetro `scale` se
+// combina con el tamaño propio de la skin (skin.scale).
 function drawSkinShip(ctx, skin, thrusting, scale = 1, boosted = false) {
-  const light = theme.id === 'light';
-  const stroke = light && skin.strokeLight ? skin.strokeLight : skin.stroke;
-  const fill   = light && skin.fillLight   ? skin.fillLight   : skin.fill;
-  const flame  = light && skin.flameLight  ? skin.flameLight  : skin.flame;
+  const s = scale * skinScale(skin);
+  const { stroke, fill, flame } = skinPalette(skin);
 
   ctx.save();
-  ctx.scale(scale, scale);
+  ctx.scale(s, s);
   ctx.globalAlpha = skin.alpha;
   ctx.lineJoin    = 'round';
   ctx.lineCap     = 'round';
-  ctx.lineWidth   = scale >= 1 ? 1.5 * scale : 1.5 / scale;
+  ctx.lineWidth   = s >= 1 ? 1.5 * s : 1.5 / s;
 
   // Llama del propulsor (detrás del casco, para que salga por la popa)
   if (thrusting && Math.random() > 0.35) {
@@ -484,11 +517,16 @@ function drawSkinShip(ctx, skin, thrusting, scale = 1, boosted = false) {
 }
 
 // ── Ship ──────────────────────────────────────────────────────────────────────
+const SHIP_BASE_RADIUS = 12;   // radio de colisión de la nave original
+
 class Ship {
   constructor() {
     this.shieldCharges = 0;   // cargas del escudo: solo se reinician al empezar partida
     this.reset();
   }
+
+  // El radio de colisión crece con el tamaño propio de la skin activa
+  get radius() { return SHIP_BASE_RADIUS * skinScale(SKINS[skinIndex]); }
 
   reset() {
     this.x      = W / 2;
@@ -496,7 +534,6 @@ class Ship {
     this.angle  = -Math.PI / 2;
     this.vx     = 0;
     this.vy     = 0;
-    this.radius = 12;
     this.thrusting     = false;
     this.invincible    = 3;
     this.shootCooldown = 0;
@@ -546,9 +583,9 @@ class Ship {
     return shots;
   }
 
-  // Crea una bala en la nariz de la nave
+  // Crea una bala en la nariz de la nave (el morro crece con la skin activa)
   makeBullet() {
-    const NOSE = 21;
+    const NOSE = 21 * skinScale(SKINS[skinIndex]);
     const ox = this.x + Math.cos(this.angle) * NOSE;
     const oy = this.y + Math.sin(this.angle) * NOSE;
     const triple = this.tripleTimer > 0 || this.burstLeft > 0;
@@ -587,6 +624,8 @@ class Ship {
     const t = performance.now() / 1000;
     const seg = (Math.PI * 2) / SHIELD_MAX_CHARGES;
     const gap = 0.35;   // separación entre arcos
+    // La burbuja envuelve la nave, por lo que crece con el tamaño de la skin
+    const radius = SHIELD_RADIUS * skinScale(SKINS[skinIndex]);
 
     ctx.save();
     ctx.translate(this.x, this.y);
@@ -596,7 +635,7 @@ class Ship {
     ctx.globalAlpha = 0.55 + 0.25 * Math.sin(t * 5);   // pulso
     for (let i = 0; i < this.shieldCharges; i++) {
       ctx.beginPath();
-      ctx.arc(0, 0, SHIELD_RADIUS, i * seg + gap, (i + 1) * seg - gap);
+      ctx.arc(0, 0, radius, i * seg + gap, (i + 1) * seg - gap);
       ctx.stroke();
     }
     ctx.restore();
@@ -952,7 +991,7 @@ function update(dt) {
       if (!a.dead && !b.dead && dist(b, a) < a.radius) {
         b.dead = true;
         a.dead = true;
-        score += a.points;
+        score += a.points * pointsMultiplier();
         explode(a.x, a.y, a.size * 5);
         newAsteroids.push(...a.split());
         // Probabilidad de soltar un power-up (como máximo uno por asteroide)
@@ -1029,7 +1068,8 @@ function drawLifeIcon(x, y) {
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(-Math.PI / 2);
-  drawSkinShip(ctx, SKINS[skinIndex], false, 0.45);
+  // Los iconos del HUD mantienen siempre el mismo tamaño, sea cual sea la skin
+  drawSkinShip(ctx, SKINS[skinIndex], false, 0.45 / skinScale(SKINS[skinIndex]));
   ctx.restore();
 }
 
@@ -1042,6 +1082,14 @@ function drawHUD() {
 
   ctx.textAlign = 'center';
   ctx.fillText(`NIVEL ${level}`, W / 2, 26);
+
+  // Aviso del multiplicador de puntos de la skin activa (p. ej. la Morada)
+  const mult = pointsMultiplier();
+  if (mult > 1) {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = skinPalette(SKINS[skinIndex]).stroke;
+    ctx.fillText(`PUNTOS x${mult}`, W / 2, 46);
+  }
 
   for (let i = 0; i < lives; i++)
     drawLifeIcon(W - 16 - i * 22, 18);
