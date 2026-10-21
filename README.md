@@ -29,6 +29,7 @@ Luego visita `http://localhost:3000`.
 | `←` `→`   | Rotar nave |
 | `↑`       | Propulsar  |
 | `Espacio` | Disparar   |
+| `S`       | Menú de skins |
 
 ## Puntuación
 
@@ -45,6 +46,27 @@ Luego visita `http://localhost:3000`.
 - Asteroides se parten en fragmentos más pequeños al ser destruidos
 - Partículas de explosión al destruir asteroides
 - Dos power-ups: «Velocidad» (⚡) y «Triple shot» (tridente)
+
+## Skins de la nave
+
+- Pulsa `S` para abrir el **menú de skins**: la partida se pausa y se muestra la
+  nave en grande, con su nombre y descripción
+- `←` `→` recorren las skins (manteniendo la flecha se repiten solas);
+  `Enter`, `Espacio` o `Esc` vuelven al juego
+- La skin elegida se guarda en el navegador, así que se recupera al recargar la
+  página
+- La nave en juego y los iconos de vidas usan siempre la skin activa
+
+| Skin      | Descripción                          |
+| --------- | ------------------------------------ |
+| Clásica   | La nave original de la serie         |
+| Neón      | Trazo cian y llama magenta           |
+| Dorada    | Casco dorado                         |
+| Delta     | Caza roja de alas en flecha          |
+| OVNI      | Platillo verde con cúpula            |
+| Fantasma  | Silueta translúcida azul             |
+
+> Con el power-up "Velocidad" la nave se pinta de cian, sea cual sea la skin.
 
 ## Power-up "Velocidad"
 
