@@ -70,6 +70,7 @@ Con la skin «Morada» todos los puntos se **doblan** (40 / 100 / 200 / 500).
 | OVNI      | Platillo verde con cúpula            |
 | Fantasma  | Silueta translúcida azul             |
 | Morada    | Gigante morada: dobla los puntos     |
+| Avión     | Un avión de alas rectas              |
 
 > Con el power-up "Velocidad" la nave se pinta de cian, sea cual sea la skin.
 
