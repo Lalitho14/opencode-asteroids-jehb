@@ -30,6 +30,7 @@ Luego visita `http://localhost:3000`.
 | `↑`       | Propulsar  |
 | `Espacio` | Disparar   |
 | `S`       | Menú de skins |
+| `D`       | Tema claro / oscuro |
 
 ## Puntuación
 
@@ -46,6 +47,7 @@ Luego visita `http://localhost:3000`.
 - Asteroides se parten en fragmentos más pequeños al ser destruidos
 - Partículas de explosión al destruir asteroides
 - Tres power-ups: «Velocidad» (⚡), «Triple shot» (tridente) y «Escudo» (hexágono)
+- Tema claro / oscuro conmutable con la tecla `D` (persistente)
 
 ## Skins de la nave
 
@@ -67,6 +69,21 @@ Luego visita `http://localhost:3000`.
 | Fantasma  | Silueta translúcida azul             |
 
 > Con el power-up "Velocidad" la nave se pinta de cian, sea cual sea la skin.
+
+## Tema claro / oscuro
+
+- Pulsa `D` para alternar entre el tema **oscuro** (el negro del espacio) y el
+  tema **claro** (modo día)
+- El tema se guarda en el navegador, así que se recupera al recargar la página
+- Si no hay preferencia guardada, se respeta la del sistema operativo
+  (`prefers-color-scheme`)
+- Al cambiar, un aviso `TEMA: CLARO` / `TEMA: OSCURO` aparece unos segundos en
+  el centro de la pantalla
+- El HUD muestra el tema activo junto a la pista de teclado: `D: TEMA OSCURO`
+- Cada skin trae su variante para el tema claro (trazo, relleno y llama), de
+  modo que la nave se sigue viendo bien en los dos temas
+- El cambio de tema se puede hacer en cualquier momento, también con el menú de
+  skins abierto
 
 ## Power-up "Velocidad"
 

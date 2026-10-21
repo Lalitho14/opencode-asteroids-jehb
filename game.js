@@ -29,9 +29,108 @@ const dist  = (a, b)   => Math.hypot(a.x - b.x, a.y - b.y);
 const rand  = (min, max) => min + Math.random() * (max - min);
 const randInt = (min, max) => Math.floor(rand(min, max + 1));
 
+// ── Temas (claro / oscuro) ─────────────────────────────────────────────────────
+// El negro del espacio es el estado natural del juego, pero un tema claro
+// ("modo día") puede resultar más cómodo en pantallas con mucha luz ambiente.
+// El tema se alterna con la tecla D y se recuerda entre sesiones.
+
+const THEMES = {
+  dark: {
+    id: 'dark',
+    name: 'Oscuro',
+    bg: '#000',                          // fondo del canvas
+    page: '#000',                        // fondo de la página
+    border: '#222',                      // borde del canvas
+    fg: '#fff',                          // texto principal
+    dim: 'rgba(255, 255, 255, 0.65)',    // texto secundario
+    faint: 'rgba(255, 255, 255, 0.3)',   // texto terciario
+    overlay: 'rgba(0, 0, 0, 0.78)',      // velo de los menús
+    line: '#fff',                        // contornos de asteroides
+    particle: '#fff',                    // partículas de explosión
+    bullet: '#fff',                      // balas del jugador
+    triple: '#7cffb2',                   // power-up "Triple shot"
+    shield: '#7fd8ff',                   // power-up "Escudo"
+    shieldFaint: 'rgba(127, 216, 255, 0.35)',
+    speed: '#ffd83d',                    // power-up "Velocidad"
+    speedGlow: 'rgba(255, 216, 61, 0.45)',
+    tripleGlow: 'rgba(124, 255, 178, 0.45)',
+    shieldGlow: 'rgba(127, 216, 255, 0.45)',
+  },
+  light: {
+    id: 'light',
+    name: 'Claro',
+    bg: '#dde8f6',
+    page: '#eef3fb',
+    border: '#b9cbe4',
+    fg: '#16233c',
+    dim: 'rgba(22, 35, 60, 0.7)',
+    faint: 'rgba(22, 35, 60, 0.4)',
+    overlay: 'rgba(232, 240, 251, 0.9)',
+    line: '#16233c',
+    particle: '#16233c',
+    bullet: '#16233c',
+    triple: '#1a6f45',
+    shield: '#0d5f88',
+    shieldFaint: 'rgba(13, 95, 136, 0.35)',
+    speed: '#7a5600',
+    speedGlow: 'rgba(122, 86, 0, 0.45)',
+    tripleGlow: 'rgba(26, 111, 69, 0.45)',
+    shieldGlow: 'rgba(13, 95, 136, 0.45)',
+  },
+};
+
+const THEME_KEY = 'asteroids.theme';  // clave del tema guardado en el navegador
+
+function loadThemeId() {
+  try {
+    const id = localStorage.getItem(THEME_KEY);
+    if (id && THEMES[id]) return id;
+  } catch (e) {
+    // sin almacenamiento disponible
+  }
+  // Sin preferencia guardada se sigue la del sistema operativo
+  try {
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches)
+      return 'light';
+  } catch (e) {
+    // sin matchMedia disponible
+  }
+  return 'dark';
+}
+
+let theme = THEMES[loadThemeId()];
+
+function saveThemeId(id) {
+  try {
+    localStorage.setItem(THEME_KEY, id);
+  } catch (e) {
+    // sin almacenamiento disponible (p. ej. file:// bloqueado)
+  }
+}
+
+// Aplica el tema al canvas, a la página y al resto de la interfaz
+function applyTheme(id) {
+  theme = THEMES[id] || THEMES.dark;
+  document.body.style.background = theme.page;
+  canvas.style.borderColor = theme.border;
+  document.documentElement.style.colorScheme = theme.id;
+}
+
+function toggleTheme() {
+  applyTheme(theme.id === 'dark' ? 'light' : 'dark');
+  saveThemeId(theme.id);
+  setToast(`TEMA: ${theme.name.toUpperCase()}`);
+}
+
+// Colores del power-up "Velocidad" según el tema activo
+function boostStroke() { return theme.id === 'light' ? BOOST_STROKE_LIGHT : BOOST_STROKE; }
+function boostFlame()  { return theme.id === 'light' ? BOOST_FLAME_LIGHT : BOOST_FLAME; }
+
 // ── Bullet ────────────────────────────────────────────────────────────────────
+const ENEMY_BULLET_COLOR = '#ff6b6b';   // color de los proyectiles enemigos
+
 class Bullet {
-  constructor(x, y, angle, color = '#fff') {
+  constructor(x, y, angle, color = null) {
     this.x = x;
     this.y = y;
     const SPEED = 520;
@@ -39,7 +138,7 @@ class Bullet {
     this.vy = Math.sin(angle) * SPEED;
     this.ttl  = 1.1;
     this.radius = 2;
-    this.color = color;
+    this.color = color;     // null = color del tema
     this.enemy = false;   // true si es un proyectil enemigo (hoy no hay ninguno)
     this.dead = false;
   }
@@ -52,7 +151,7 @@ class Bullet {
   }
 
   draw() {
-    ctx.fillStyle = this.enemy ? '#ff6b6b' : this.color;
+    ctx.fillStyle = this.enemy ? ENEMY_BULLET_COLOR : (this.color || theme.bullet);
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
     ctx.fill();
@@ -119,7 +218,7 @@ class Asteroid {
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.rot);
-    ctx.strokeStyle = '#fff';
+    ctx.strokeStyle = theme.line;
     ctx.lineWidth   = 1.5;
     ctx.lineJoin    = 'round';
     ctx.beginPath();
@@ -210,7 +309,8 @@ class ShootingStar extends Asteroid {
 // Cada skin define su silueta (polígonos en coordenadas locales de la nave, con
 // el morro hacia +X), el color del trazo, el relleno opcional y la llama del
 // propulsor. El mismo renderizador sirve para la nave en juego, la vista previa
-// del menú y los iconos de vidas del HUD.
+// del menú y los iconos de vidas del HUD. Las variantes "Light" son los colores
+// equivalentes en el tema claro (si faltan, se usa el color principal).
 
 function ellipsePoly(cx, cy, rx, ry, n = 12) {
   const pts = [];
@@ -228,6 +328,7 @@ const SKINS = [
     desc: 'La nave original de la serie.',
     hull: [[[20, 0], [-12, -9], [-7, 0], [-12, 9]]],
     stroke: '#fff',
+    strokeLight: '#16233c',
     fill: null,
     flame: 'rgba(255, 130, 0, 0.85)',
     exhaust: [-8, 0],
@@ -239,6 +340,7 @@ const SKINS = [
     desc: 'Brilla en la oscuridad del espacio.',
     hull: [[[20, 0], [-12, -9], [-7, 0], [-12, 9]]],
     stroke: '#3ff0ff',
+    strokeLight: '#0b7285',
     fill: 'rgba(0, 70, 90, 0.55)',
     flame: 'rgba(255, 60, 200, 0.9)',
     exhaust: [-8, 0],
@@ -250,7 +352,9 @@ const SKINS = [
     desc: 'Doreada como el oro puro.',
     hull: [[[20, 0], [-12, -9], [-7, 0], [-12, 9]]],
     stroke: '#ffd24a',
+    strokeLight: '#7a4f0d',
     fill: 'rgba(255, 190, 40, 0.28)',
+    fillLight: 'rgba(122, 79, 13, 0.22)',
     flame: 'rgba(255, 245, 170, 0.9)',
     exhaust: [-8, 0],
     alpha: 1,
@@ -261,6 +365,7 @@ const SKINS = [
     desc: 'Caza de alas en flecha.',
     hull: [[[22, 0], [0, 6], [-13, 12], [-5, 3], [-9, 0], [-5, -3], [-13, -12], [0, -6]]],
     stroke: '#ff5a4a',
+    strokeLight: '#a93226',
     fill: 'rgba(220, 50, 50, 0.35)',
     flame: 'rgba(255, 240, 240, 0.9)',
     exhaust: [-14, 0],
@@ -275,6 +380,7 @@ const SKINS = [
       [[-4, 0], [-3, -5], [1, -8], [6, -7], [9, -3], [9, 0]],
     ],
     stroke: '#8ff08a',
+    strokeLight: '#256b28',
     fill: 'rgba(120, 220, 130, 0.85)',
     flame: 'rgba(200, 255, 200, 0.9)',
     exhaust: [-14, 0],
@@ -286,15 +392,20 @@ const SKINS = [
     desc: 'Se desliza entre los asteroides.',
     hull: [[[18, 0], [6, -8], [-4, -9], [-11, -5], [-9, 0], [-11, 5], [-4, 9], [6, 8]]],
     stroke: 'rgba(190, 220, 255, 0.9)',
+    strokeLight: 'rgba(22, 35, 60, 0.85)',
     fill: 'rgba(150, 200, 255, 0.35)',
+    fillLight: 'rgba(60, 110, 200, 0.25)',
     flame: 'rgba(190, 220, 255, 0.8)',
+    flameLight: 'rgba(22, 35, 60, 0.7)',
     exhaust: [-11, 0],
     alpha: 0.75,
   },
 ];
 
 const BOOST_STROKE = '#8ff3ff';      // color de la nave con el power-up "Velocidad"
+const BOOST_STROKE_LIGHT = '#0b7285';  // el mismo boost sobre el tema claro
 const BOOST_FLAME = 'rgba(120, 230, 255, 0.9)';
+const BOOST_FLAME_LIGHT = 'rgba(15, 95, 120, 0.9)';
 const SKIN_KEY    = 'asteroids.skin'; // clave de la skin guardada en el navegador
 
 const SKIN_REPEAT_DELAY = 0.35; // s hasta empezar a repetir manteniendo la flecha
@@ -327,7 +438,14 @@ function setSkin(i) {
 }
 
 // Dibuja la nave de una skin en el contexto actual, con el morro hacia +X.
+// Cada skin puede traer variantes para el tema claro (strokeLight, fillLight,
+// flameLight); si faltan se usa el color principal.
 function drawSkinShip(ctx, skin, thrusting, scale = 1, boosted = false) {
+  const light = theme.id === 'light';
+  const stroke = light && skin.strokeLight ? skin.strokeLight : skin.stroke;
+  const fill   = light && skin.fillLight   ? skin.fillLight   : skin.fill;
+  const flame  = light && skin.flameLight  ? skin.flameLight  : skin.flame;
+
   ctx.save();
   ctx.scale(scale, scale);
   ctx.globalAlpha = skin.alpha;
@@ -344,19 +462,19 @@ function drawSkinShip(ctx, skin, thrusting, scale = 1, boosted = false) {
     ctx.moveTo(ex, ey - 4);
     ctx.lineTo(ex - len, ey);
     ctx.lineTo(ex, ey + 4);
-    ctx.strokeStyle = boosted ? BOOST_FLAME : skin.flame;
+    ctx.strokeStyle = boosted ? boostFlame() : flame;
     ctx.stroke();
   }
 
-  ctx.strokeStyle = boosted ? BOOST_STROKE : skin.stroke;
+  ctx.strokeStyle = boosted ? boostStroke() : stroke;
   for (const poly of skin.hull) {
     ctx.beginPath();
     ctx.moveTo(poly[0][0], poly[0][1]);
     for (let i = 1; i < poly.length; i++)
       ctx.lineTo(poly[i][0], poly[i][1]);
     ctx.closePath();
-    if (skin.fill) {
-      ctx.fillStyle = skin.fill;
+    if (fill) {
+      ctx.fillStyle = fill;
       ctx.fill();
     }
     ctx.stroke();
@@ -434,7 +552,7 @@ class Ship {
     const ox = this.x + Math.cos(this.angle) * NOSE;
     const oy = this.y + Math.sin(this.angle) * NOSE;
     const triple = this.tripleTimer > 0 || this.burstLeft > 0;
-    return new Bullet(ox, oy, this.angle, triple ? TRIPLE_COLOR : '#fff');
+    return new Bullet(ox, oy, this.angle, triple ? theme.triple : null);
   }
 
   // Siguiente disparo de la ráfaga triple (null si no queda ninguno)
@@ -473,7 +591,7 @@ class Ship {
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(t * 0.6);   // gira lento
-    ctx.strokeStyle = SHIELD_COLOR;
+    ctx.strokeStyle = theme.shield;
     ctx.lineWidth = 2;
     ctx.globalAlpha = 0.55 + 0.25 * Math.sin(t * 5);   // pulso
     for (let i = 0; i < this.shieldCharges; i++) {
@@ -487,7 +605,7 @@ class Ship {
 
 // ── Partículas (explosión) ────────────────────────────────────────────────────
 class Particle {
-  constructor(x, y, color = '#fff') {
+  constructor(x, y, color = null) {
     this.x  = x;
     this.y  = y;
     this.color = color;
@@ -509,7 +627,7 @@ class Particle {
 
   draw() {
     const alpha = this.ttl / this.life;
-    ctx.strokeStyle = this.color;
+    ctx.strokeStyle = this.color || theme.particle;
     ctx.globalAlpha = alpha;
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -530,7 +648,6 @@ const SPEED_MULTIPLIER = 2;   // factor de velocidad de la nave con el power-up
 // ── Power-up (Triple shot) ───────────────────────────────────────────────────
 const TRIPLE_DURATION = 5;      // s de efecto "Triple shot"
 const TRIPLE_CHANCE   = 0.10;   // probabilidad de soltar el tridente al destruir un asteroide
-const TRIPLE_COLOR    = '#7cffb2';
 const SHOOT_COOLDOWN  = 0.2;    // s entre ráfagas
 const BURST_COUNT     = 3;      // disparos por ráfaga triple
 const BURST_INTERVAL  = 0.07;   // s entre disparos de la ráfaga (~36 px de separación)
@@ -538,7 +655,6 @@ const BURST_INTERVAL  = 0.07;   // s entre disparos de la ráfaga (~36 px de sep
 // ── Power-up (Escudo) ─────────────────────────────────────────────────────────
 const SHIELD_MAX_CHARGES = 3;    // impactos que absorbe el escudo
 const SHIELD_RADIUS      = 24;   // radio de la burbuja (px)
-const SHIELD_COLOR       = '#7fd8ff';
 const SHIELD_CHANCE      = 0.10; // prob. de soltarlo al destruir un asteroide
 
 // Rayo (⚡) dibujado centrado en (x, y) con el tamaño dado
@@ -584,7 +700,7 @@ function drawShieldIcon(x, y, size) {
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(size / 9, size / 9);
-  ctx.strokeStyle = SHIELD_COLOR;
+  ctx.strokeStyle = theme.shield;
   ctx.lineWidth   = 1.5;
   ctx.lineJoin    = 'round';
   ctx.beginPath();
@@ -599,7 +715,7 @@ function drawShieldIcon(x, y, size) {
   ctx.stroke();
 
   // Glifo de escudo relleno
-  ctx.fillStyle = SHIELD_COLOR;
+  ctx.fillStyle = theme.shield;
   ctx.beginPath();
   ctx.moveTo(-3.5, -3);
   ctx.lineTo( 3.5, -3);
@@ -636,9 +752,9 @@ class PowerUp {
 
     const y = this.y + Math.sin(this.bob) * 2;
     const glow = {
-      speed:  'rgba(255, 216, 61, 0.45)',
-      triple: 'rgba(124, 255, 178, 0.45)',
-      shield: 'rgba(127, 216, 255, 0.45)',
+      speed:  theme.speedGlow,
+      triple: theme.tripleGlow,
+      shield: theme.shieldGlow,
     }[this.kind];
 
     ctx.save();
@@ -649,9 +765,9 @@ class PowerUp {
     ctx.stroke();
     ctx.restore();
 
-    if (this.kind === 'triple')      drawTrident(this.x, y, 9, TRIPLE_COLOR);
+    if (this.kind === 'triple')      drawTrident(this.x, y, 9, theme.triple);
     else if (this.kind === 'shield') drawShieldIcon(this.x, y, 9);
-    else                             drawBolt(this.x, y, 9, '#ffd83d');
+    else                             drawBolt(this.x, y, 9, theme.speed);
   }
 }
 
@@ -663,6 +779,15 @@ let state;      // 'playing' | 'dead' | 'gameover' | 'skins'
 let prevState;  // estado al que se vuelve al cerrar el menú de skins
 let deadTimer;
 let animTime = 0;  // reloj de animación (vista previa del menú de skins)
+let toast = '';    // aviso breve en pantalla (p. ej. el cambio de tema)
+let toastTimer = 0;
+
+const TOAST_DURATION = 1.6;  // s que dura el aviso
+
+function setToast(text) {
+  toast = text;
+  toastTimer = TOAST_DURATION;
+}
 
 function spawnAsteroids(count) {
   const SAFE_DIST = 130;
@@ -711,7 +836,7 @@ function nextLevel() {
   spawnAsteroids(3 + level);
 }
 
-function explode(x, y, count = 8, color = '#fff') {
+function explode(x, y, count = 8, color = null) {
   for (let i = 0; i < count; i++) particles.push(new Particle(x, y, color));
 }
 
@@ -730,6 +855,15 @@ function killShip() {
 // ── Update ────────────────────────────────────────────────────────────────────
 function update(dt) {
   animTime += dt;
+
+  // El aviso en pantalla caduca en cualquier estado
+  if (toastTimer > 0) {
+    toastTimer -= dt;
+    if (toastTimer <= 0) toast = '';
+  }
+
+  // Alternar el tema claro/oscuro (única lectura de la tecla por frame)
+  if (pressed('KeyD')) toggleTheme();
 
   // Abrir o cerrar el menú de skins (única lectura de la tecla por frame)
   if (pressed('KeyS')) {
@@ -840,7 +974,7 @@ function update(dt) {
         if (ship.shieldCharges > 0) {
           a.dead = true;
           ship.shieldCharges--;
-          explode(a.x, a.y, 12, SHIELD_COLOR);  // absorbido: sin puntos y sin partirse
+          explode(a.x, a.y, 12, theme.shield);  // absorbido: sin puntos y sin partirse
         } else {
           killShip();
         }
@@ -858,7 +992,7 @@ function update(dt) {
         b.dead = true;
         if (ship.shieldCharges > 0) {
           ship.shieldCharges--;
-          explode(b.x, b.y, 6, SHIELD_COLOR);
+          explode(b.x, b.y, 6, theme.shield);
         } else {
           killShip();
         }
@@ -880,7 +1014,7 @@ function update(dt) {
         } else {
           ship.speedTimer = SPEED_DURATION;
         }
-        explode(p.x, p.y, 10, p.kind === 'shield' ? SHIELD_COLOR : '#fff');
+        explode(p.x, p.y, 10, p.kind === 'shield' ? theme.shield : null);
       }
     }
     powerups = powerups.filter(p => !p.dead);
@@ -900,7 +1034,7 @@ function drawLifeIcon(x, y) {
 }
 
 function drawHUD() {
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = theme.fg;
   ctx.font = '15px monospace';
 
   ctx.textAlign = 'left';
@@ -916,30 +1050,32 @@ function drawHUD() {
   let py = 50;
   if (ship && !ship.dead && ship.speedTimer > 0) {
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#8ff3ff';
+    ctx.fillStyle = boostStroke();
     ctx.fillText(`VELOCIDAD ${ship.speedTimer.toFixed(1)}s`, 32, py);
-    drawBolt(21, py - 5, 8, '#ffd83d');
+    drawBolt(21, py - 5, 8, theme.speed);
     py += 24;
   }
   if (ship && !ship.dead && ship.tripleTimer > 0) {
     ctx.textAlign = 'left';
-    ctx.fillStyle = TRIPLE_COLOR;
+    ctx.fillStyle = theme.triple;
     ctx.fillText(`TRIPLE ${ship.tripleTimer.toFixed(1)}s`, 32, py);
-    drawTrident(21, py - 5, 8, TRIPLE_COLOR);
+    drawTrident(21, py - 5, 8, theme.triple);
   }
 
-  // Skin activa y pista para abrir el menú
+  // Skin activa, tema y pistas de teclado
   ctx.font = '13px monospace';
-  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.fillStyle = theme.dim;
   ctx.textAlign = 'left';
   ctx.fillText(`SKIN  ${SKINS[skinIndex].name}`, 14, H - 14);
   ctx.textAlign = 'right';
   ctx.fillText('S: SKINS', W - 14, H - 14);
+  ctx.fillStyle = theme.faint;
+  ctx.fillText(`D: TEMA ${theme.name.toUpperCase()}`, W - 14, H - 30);
 
   // Indicador de cargas del escudo (en la misma fila, junto al nombre de la skin)
   if (ship) {
     ctx.textAlign = 'left';
-    ctx.fillStyle = SHIELD_COLOR;
+    ctx.fillStyle = theme.shield;
     ctx.fillText('ESCUDO', 150, H - 14);
     for (let i = 0; i < SHIELD_MAX_CHARGES; i++) {
       const x = 210 + i * 15;
@@ -947,10 +1083,10 @@ function drawHUD() {
       ctx.beginPath();
       ctx.arc(x, y, 4, 0, Math.PI * 2);
       if (i < ship.shieldCharges) {
-        ctx.fillStyle = SHIELD_COLOR;
+        ctx.fillStyle = theme.shield;
         ctx.fill();
       } else {
-        ctx.strokeStyle = 'rgba(127, 216, 255, 0.35)';
+        ctx.strokeStyle = theme.shieldFaint;
         ctx.lineWidth = 1;
         ctx.stroke();
       }
@@ -977,11 +1113,11 @@ function drawSkinMenu() {
   const skin = SKINS[skinIndex];
 
   // Fondo oscurecido
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.78)';
+  ctx.fillStyle = theme.overlay;
   ctx.fillRect(0, 0, W, H);
 
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = theme.fg;
   ctx.font = 'bold 28px monospace';
   ctx.fillText('ELEGIR SKIN', W / 2, 92);
 
@@ -993,15 +1129,15 @@ function drawSkinMenu() {
   ctx.restore();
 
   // Flechas de navegación
-  drawArrow(W / 2 - 150, 210, 12, -1, 'rgba(255,255,255,0.7)');
-  drawArrow(W / 2 + 150, 210, 12,  1, 'rgba(255,255,255,0.7)');
+  drawArrow(W / 2 - 150, 210, 12, -1, theme.dim);
+  drawArrow(W / 2 + 150, 210, 12,  1, theme.dim);
 
   // Nombre y descripción de la skin
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = theme.fg;
   ctx.font = '24px monospace';
   ctx.fillText(skin.name, W / 2, 300);
 
-  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.fillStyle = theme.dim;
   ctx.font = '13px monospace';
   ctx.fillText(skin.desc, W / 2, 326);
 
@@ -1013,29 +1149,43 @@ function drawSkinMenu() {
   let x = W / 2 - total / 2;
   SKINS.forEach((s, i) => {
     ctx.textAlign = 'left';
-    ctx.fillStyle = i === skinIndex ? '#fff' : 'rgba(255,255,255,0.3)';
+    ctx.fillStyle = i === skinIndex ? theme.fg : theme.faint;
     ctx.fillText(s.name, x, 470);
     x += widths[i] + gap;
   });
 
   // Ayuda de controles
   ctx.textAlign = 'center';
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.fillStyle = theme.dim;
   ctx.fillText('← →  CAMBIAR        ENTER / ESPACIO / ESC  VOLVER', W / 2, 520);
 }
 
 function drawOverlay(title, sub) {
   ctx.textAlign   = 'center';
-  ctx.fillStyle   = '#fff';
+  ctx.fillStyle   = theme.fg;
   ctx.font        = 'bold 46px monospace';
   ctx.fillText(title, W / 2, H / 2 - 18);
   ctx.font        = '18px monospace';
-  ctx.fillStyle   = 'rgba(255,255,255,0.65)';
+  ctx.fillStyle   = theme.dim;
   ctx.fillText(sub, W / 2, H / 2 + 22);
 }
 
+// Aviso breve (p. ej. "TEMA: CLARO") que se desvanece al terminar
+function drawToast() {
+  if (!toast) return;
+  const alpha = Math.min(1, toastTimer / 0.5);
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = theme.fg;
+  ctx.font = 'bold 18px monospace';
+  ctx.fillText(toast, W / 2, 64);
+  ctx.restore();
+}
+
 function draw() {
-  ctx.fillStyle = '#000';
+  ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, W, H);
 
   particles.forEach(p => p.draw());
@@ -1051,6 +1201,8 @@ function draw() {
 
   if (state === 'skins')
     drawSkinMenu();
+
+  drawToast();
 }
 
 // ── Loop principal ────────────────────────────────────────────────────────────
@@ -1064,5 +1216,6 @@ function loop(ts) {
   requestAnimationFrame(loop);
 }
 
+applyTheme(theme.id);   // pinta la página con el tema elegido
 initGame();
 requestAnimationFrame(loop);
