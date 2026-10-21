@@ -53,6 +53,24 @@ Luego visita `http://localhost:3000`.
   (empuje y velocidad máxima duplicados); la nave y la llama se vuelven cian
 - Recoger otro rayo reinicia el contador a 5 s (no se acumulan)
 
+## Power-up "Escudo"
+
+- Al destruir un asteroide normal hay un **10 % de probabilidad** de soltar un hexágono cian
+  con glifo de escudo (las estrellas fugaces no sueltan power-ups)
+- El escudo desaparece solo a los 10 s (parpadea en los últimos 2 s)
+- Al recogerlo la nave gana una **burbuja de escudo con 3 cargas**: cada impacto de asteroide
+  o de proyectil enemigo **absorbe el impacto y consume 1 carga**
+- El asteroide absorbido se destruye **sin dar puntos y sin partirse** en fragmentos
+  (el escudo no sirve para farmear puntuación); la estrella fugaz también se absorbe
+- Cuando se agota la última carga la burbuja desaparece y la nave vuelve a morir ante los impactos
+- Recoger otro escudo **recarga las cargas al máximo** (no se acumulan)
+- Las cargas **se conservan** al cambiar de nivel y al reaparecer tras morir;
+  se reinician a 0 al empezar una partida nueva
+- La burbuja gira lentamente y late con la opacidad, dibujando **un arco por carga** disponible
+- Indicador `ESCUDO` con 3 puntos (llenos = cargas disponibles) en la esquina inferior izquierda del HUD
+- El escudo también absorbe los proyectiles marcados como enemigos: hoy no hay enemigos que
+  disparen, pero la mecánica ya está lista y hace que la nave muera por ellos si no tiene cargas
+
 ## Asteroide especial «estrella fugaz»
 
 - Aparece periódicamente (cada ~18 s, nunca más de una a la vez) lejos de la nave
