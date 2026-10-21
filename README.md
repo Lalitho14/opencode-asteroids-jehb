@@ -41,6 +41,8 @@ Luego visita `http://localhost:3000`.
 | Pequeño          | 100    |
 | Estrella fugaz   | 250    |
 
+Con la skin «Morada» todos los puntos se **doblan** (40 / 100 / 200 / 500).
+
 ## Características
 
 - 3 vidas con invencibilidad temporal al reaparecer (parpadeo)
@@ -67,8 +69,18 @@ Luego visita `http://localhost:3000`.
 | Delta     | Caza roja de alas en flecha          |
 | OVNI      | Platillo verde con cúpula            |
 | Fantasma  | Silueta translúcida azul             |
+| Morada    | Gigante morada: dobla los puntos     |
 
 > Con el power-up "Velocidad" la nave se pinta de cian, sea cual sea la skin.
+
+### Skin «Morada»
+
+- Nave **color morada** y **dos veces más grande** que la nave original
+- A cambio de ser un blanco más grande (también su **zona de colisión es el doble**),
+  otorga el **doble de puntos** por cada asteroide o estrella fugaz destruida
+- El HUD muestra `PUNTOS x2` en morado mientras la skin está activa
+- El multiplicador se aplica en el momento: si cambias de skin a mitad de partida,
+  la puntuación siguiente usa el multiplicador de la skin nueva
 
 ## Tema claro / oscuro
 
