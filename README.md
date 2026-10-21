@@ -45,7 +45,7 @@ Luego visita `http://localhost:3000`.
 - 3 vidas con invencibilidad temporal al reaparecer (parpadeo)
 - Asteroides se parten en fragmentos más pequeños al ser destruidos
 - Partículas de explosión al destruir asteroides
-- Dos power-ups: «Velocidad» (⚡) y «Triple shot» (tridente)
+- Tres power-ups: «Velocidad» (⚡), «Triple shot» (tridente) y «Escudo» (hexágono)
 
 ## Skins de la nave
 
@@ -71,6 +71,7 @@ Luego visita `http://localhost:3000`.
 ## Power-up "Velocidad"
 
 - Al destruir un asteroide hay un 12% de probabilidad de soltar un rayo ⚡
+  (solo cae un power-up por asteroide: 12 % velocidad, 10 % triple shot, 10 % escudo)
 - El rayo desaparece solo a los 10 s (parpadea en los últimos 2 s)
 - Al recogerlo, la nave se mueve al **doble de velocidad** durante **5 segundos**
   (empuje y velocidad máxima duplicados); la nave y la llama se vuelven cian
@@ -88,6 +89,27 @@ Luego visita `http://localhost:3000`.
 - Recoger otro tridente reinicia el contador a 5 s (no se acumulan)
 - El efecto se pierde si la nave muere o al cambiar de nivel (igual que la velocidad)
 - El HUD muestra `TRIPLE x.xs` con su icono mientras el efecto está activo
+
+## Power-up "Escudo"
+
+- Al destruir un asteroide normal hay un **10 % de probabilidad** de soltar un hexágono cian
+  con glifo de escudo (las estrellas fugaces no sueltan power-ups)
+- El escudo desaparece solo a los 10 s (parpadea en los últimos 2 s)
+- Al recogerlo la nave gana una **burbuja de escudo con 3 cargas**: cada impacto de asteroide
+  o de proyectil enemigo **absorbe el impacto y consume 1 carga**
+- El asteroide absorbido se destruye **sin dar puntos y sin partirse** en fragmentos
+  (el escudo no sirve para farmear puntuación); la estrella fugaz también se absorbe
+- Cuando se agota la última carga la burbuja desaparece y la nave vuelve a morir ante los impactos
+- Recoger otro escudo **recarga las cargas al máximo** (no se acumulan)
+- Las cargas **se conservan** al cambiar de nivel y al reaparecer tras morir;
+  se reinician a 0 al empezar una partida nueva
+- La burbuja gira lentamente y late con la opacidad, dibujando **un arco por carga** disponible
+- Indicador `ESCUDO` con 3 puntos (llenos = cargas disponibles) en la esquina inferior izquierda del HUD
+- El escudo también absorbe los proyectiles marcados como enemigos: hoy no hay enemigos que
+  disparen, pero la mecánica ya está lista y hace que la nave muera por ellos si no tiene cargas
+
+> Los tres power-ups son excluyentes: al destruir un asteroide normal cae **como
+> máximo uno** (12 % velocidad, 10 % triple shot, 10 % escudo).
 
 ## Asteroide especial «estrella fugaz»
 
