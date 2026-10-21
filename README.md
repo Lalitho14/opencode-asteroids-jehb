@@ -44,6 +44,7 @@ Luego visita `http://localhost:3000`.
 - 3 vidas con invencibilidad temporal al reaparecer (parpadeo)
 - Asteroides se parten en fragmentos más pequeños al ser destruidos
 - Partículas de explosión al destruir asteroides
+- Dos power-ups: «Velocidad» (⚡) y «Triple shot» (tridente)
 
 ## Power-up "Velocidad"
 
@@ -52,6 +53,19 @@ Luego visita `http://localhost:3000`.
 - Al recogerlo, la nave se mueve al **doble de velocidad** durante **5 segundos**
   (empuje y velocidad máxima duplicados); la nave y la llama se vuelven cian
 - Recoger otro rayo reinicia el contador a 5 s (no se acumulan)
+
+## Power-up «Triple shot»
+
+- Al destruir un asteroide hay un 10% de probabilidad de soltar un **tridente**
+  (a la vez que el 12% del rayo ⚡ de velocidad; solo cae un power-up por asteroide)
+- El tridente desaparece solo a los 10 s (parpadea en los últimos 2 s)
+- Al recogerlo, la nave dispara en **ráfaga triple** durante **5 segundos**:
+  cada pulsación de `Espacio` lanza **3 disparos seguidos en la misma línea
+  recta** (separados ~70 ms, unos 35–40 px entre balas), que salen en verde
+- El tiempo entre ráfagas no cambia (sigue siendo de 0.2 s)
+- Recoger otro tridente reinicia el contador a 5 s (no se acumulan)
+- El efecto se pierde si la nave muere o al cambiar de nivel (igual que la velocidad)
+- El HUD muestra `TRIPLE x.xs` con su icono mientras el efecto está activo
 
 ## Asteroide especial «estrella fugaz»
 

@@ -31,7 +31,7 @@ const randInt = (min, max) => Math.floor(rand(min, max + 1));
 
 // ── Bullet ────────────────────────────────────────────────────────────────────
 class Bullet {
-  constructor(x, y, angle) {
+  constructor(x, y, angle, color = '#fff') {
     this.x = x;
     this.y = y;
     const SPEED = 520;
@@ -39,6 +39,7 @@ class Bullet {
     this.vy = Math.sin(angle) * SPEED;
     this.ttl  = 1.1;
     this.radius = 2;
+    this.color = color;
     this.dead = false;
   }
 
@@ -50,7 +51,7 @@ class Bullet {
   }
 
   draw() {
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = this.color;
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
     ctx.fill();
@@ -219,6 +220,9 @@ class Ship {
     this.invincible    = 3;
     this.shootCooldown = 0;
     this.speedTimer    = 0;   // s restantes de power-up "Velocidad"
+    this.tripleTimer   = 0;   // s restantes de power-up "Triple shot"
+    this.burstLeft     = 0;   // disparos pendientes de la ráfaga triple
+    this.burstTimer    = 0;   // s hasta el siguiente disparo de la ráfaga
     this.dead          = false;
   }
 
@@ -227,6 +231,7 @@ class Ship {
     if (this.invincible    > 0) this.invincible    -= dt;
     if (this.shootCooldown > 0) this.shootCooldown -= dt;
     if (this.speedTimer    > 0) this.speedTimer    -= dt;
+    if (this.tripleTimer   > 0) this.tripleTimer   -= dt;
 
     const ROT   = 3.5;   // rad/s
     const THRUST = 260;  // px/s²
@@ -250,11 +255,36 @@ class Ship {
 
   tryShoot() {
     if (this.shootCooldown > 0 || this.dead) return [];
-    this.shootCooldown = 0.2;
+    this.shootCooldown = SHOOT_COOLDOWN;
+    const shots = [this.makeBullet()];
+    // Con "Triple shot" activo se programan 2 disparos más en la misma línea
+    if (this.tripleTimer > 0) {
+      this.burstLeft  = BURST_COUNT - 1;
+      this.burstTimer = BURST_INTERVAL;
+    }
+    return shots;
+  }
+
+  // Crea una bala en la nariz de la nave
+  makeBullet() {
     const NOSE = 21;
     const ox = this.x + Math.cos(this.angle) * NOSE;
     const oy = this.y + Math.sin(this.angle) * NOSE;
-    return [new Bullet(ox, oy, this.angle)];
+    const triple = this.tripleTimer > 0 || this.burstLeft > 0;
+    return new Bullet(ox, oy, this.angle, triple ? TRIPLE_COLOR : '#fff');
+  }
+
+  // Siguiente disparo de la ráfaga triple (null si no queda ninguno)
+  nextBurstShot() {
+    if (this.dead || this.burstLeft <= 0) {
+      this.burstLeft  = 0;
+      this.burstTimer = 0;
+      return null;
+    }
+    const bullet = this.makeBullet();
+    this.burstLeft--;
+    this.burstTimer = BURST_INTERVAL;
+    return bullet;
   }
 
   draw() {
@@ -332,6 +362,14 @@ const POWERUP_CHANCE   = 0.12; // probabilidad de soltar uno al destruir un aste
 const SPEED_DURATION   = 5;   // s de efecto "Velocidad"
 const SPEED_MULTIPLIER = 2;   // factor de velocidad de la nave con el power-up
 
+// ── Power-up (Triple shot) ───────────────────────────────────────────────────
+const TRIPLE_DURATION = 5;      // s de efecto "Triple shot"
+const TRIPLE_CHANCE   = 0.10;   // probabilidad de soltar el tridente al destruir un asteroide
+const TRIPLE_COLOR    = '#7cffb2';
+const SHOOT_COOLDOWN  = 0.2;    // s entre ráfagas
+const BURST_COUNT     = 3;      // disparos por ráfaga triple
+const BURST_INTERVAL  = 0.07;   // s entre disparos de la ráfaga (~36 px de separación)
+
 // Rayo (⚡) dibujado centrado en (x, y) con el tamaño dado
 function drawBolt(x, y, size, color) {
   ctx.save();
@@ -350,10 +388,31 @@ function drawBolt(x, y, size, color) {
   ctx.restore();
 }
 
+// Tridente (3 puntas) dibujado centrado en (x, y) con el tamaño dado
+function drawTrident(x, y, size, color) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(size / 9, size / 9);
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = 1.6;
+  ctx.lineCap     = 'round';
+  ctx.beginPath();
+  // Asta
+  ctx.moveTo(0, 9);
+  ctx.lineTo(0, -4);
+  // Puntas
+  ctx.moveTo(-6, 4);
+  ctx.lineTo(0, -8);
+  ctx.lineTo(6, 4);
+  ctx.stroke();
+  ctx.restore();
+}
+
 class PowerUp {
-  constructor(x, y) {
+  constructor(x, y, kind = 'speed') {
     this.x = x;
     this.y = y;
+    this.kind = kind;           // 'speed' | 'triple'
     this.radius = 12;
     this.ttl  = POWERUP_TTL;
     this.bob  = rand(0, Math.PI * 2);
@@ -375,14 +434,15 @@ class PowerUp {
     const y = this.y + Math.sin(this.bob) * 2;
 
     ctx.save();
-    ctx.strokeStyle = 'rgba(255, 216, 61, 0.45)';
+    ctx.strokeStyle = this.kind === 'triple' ? 'rgba(124, 255, 178, 0.45)' : 'rgba(255, 216, 61, 0.45)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.arc(this.x, y, 14, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
 
-    drawBolt(this.x, y, 9, '#ffd83d');
+    if (this.kind === 'triple') drawTrident(this.x, y, 9, TRIPLE_COLOR);
+    else drawBolt(this.x, y, 9, '#ffd83d');
   }
 }
 
@@ -479,6 +539,15 @@ function update(dt) {
     bullets.push(...ship.tryShoot());
   }
 
+  // Ráfaga "Triple shot": disparos sucesivos en la misma línea de fuego
+  if (ship.burstTimer > 0) {
+    ship.burstTimer -= dt;
+    if (ship.burstTimer <= 0) {
+      const b = ship.nextBurstShot();
+      if (b) bullets.push(b);
+    }
+  }
+
   ship.update(dt);
   bullets.forEach(b => b.update(dt));
   asteroids.forEach(a => a.update(dt));
@@ -506,8 +575,11 @@ function update(dt) {
         score += a.points;
         explode(a.x, a.y, a.size * 5);
         newAsteroids.push(...a.split());
-        // Probabilidad de soltar un power-up "Velocidad"
-        if (!a.isStar && Math.random() < POWERUP_CHANCE) powerups.push(new PowerUp(a.x, a.y));
+        // Probabilidad de soltar un power-up ("Velocidad" o "Triple shot")
+        if (!a.isStar) {
+          if (Math.random() < POWERUP_CHANCE) powerups.push(new PowerUp(a.x, a.y, 'speed'));
+          else if (Math.random() < TRIPLE_CHANCE) powerups.push(new PowerUp(a.x, a.y, 'triple'));
+        }
       }
     }
   }
@@ -529,7 +601,8 @@ function update(dt) {
     for (const p of powerups) {
       if (!p.dead && dist(ship, p) < ship.radius + p.radius) {
         p.dead = true;
-        ship.speedTimer = SPEED_DURATION;
+        if (p.kind === 'triple') ship.tripleTimer = TRIPLE_DURATION;
+        else ship.speedTimer = SPEED_DURATION;
         explode(p.x, p.y, 10);
       }
     }
@@ -571,12 +644,20 @@ function drawHUD() {
   for (let i = 0; i < lives; i++)
     drawLifeIcon(W - 16 - i * 22, 18);
 
-  // Indicador de power-up "Velocidad" activo
+  // Indicadores de power-up activos
+  let py = 50;
   if (ship && !ship.dead && ship.speedTimer > 0) {
     ctx.textAlign = 'left';
     ctx.fillStyle = '#8ff3ff';
-    ctx.fillText(`VELOCIDAD ${ship.speedTimer.toFixed(1)}s`, 32, 50);
-    drawBolt(21, 45, 8, '#ffd83d');
+    ctx.fillText(`VELOCIDAD ${ship.speedTimer.toFixed(1)}s`, 32, py);
+    drawBolt(21, py - 5, 8, '#ffd83d');
+    py += 24;
+  }
+  if (ship && !ship.dead && ship.tripleTimer > 0) {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = TRIPLE_COLOR;
+    ctx.fillText(`TRIPLE ${ship.tripleTimer.toFixed(1)}s`, 32, py);
+    drawTrident(21, py - 5, 8, TRIPLE_COLOR);
   }
 }
 
