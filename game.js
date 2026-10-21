@@ -418,6 +418,27 @@ const SKINS = [
     scale: 2,             // el doble de grande que la nave original
     pointsMultiplier: 2,  // a cambio recibe el doble de puntos
   },
+  {
+    id: 'avion',
+    name: 'Avión',
+    desc: 'Un avión de alas rectas surcando el espacio.',
+    hull: [
+      [
+        [22, 0], [14, 3], [-1, 14], [-7, 13], [-2, 3], [-6, 3],
+        [-11, 8], [-16, 7], [-13, 2.5], [-19, 2], [-19, -2], [-13, -2.5],
+        [-16, -7], [-11, -8], [-6, -3], [-2, -3], [-7, -13], [-1, -14], [14, -3],
+      ],
+      ellipsePoly(12, 0, 4.5, 2, 8),
+    ],
+    stroke: '#ff9f43',
+    strokeLight: '#b35400',
+    fill: 'rgba(255, 159, 67, 0.28)',
+    fillLight: 'rgba(179, 84, 0, 0.22)',
+    flame: 'rgba(255, 226, 160, 0.9)',
+    flameLight: 'rgba(200, 90, 10, 0.85)',
+    exhaust: [-19, 0],
+    alpha: 1,
+  },
 ];
 
 const BOOST_STROKE = '#8ff3ff';      // color de la nave con el power-up "Velocidad"
