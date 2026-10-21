@@ -67,8 +67,12 @@ Luego visita `http://localhost:3000`.
 | Delta     | Caza roja de alas en flecha          |
 | OVNI      | Platillo verde con cúpula            |
 | Fantasma  | Silueta translúcida azul             |
+| Morada    | El doble de grande: el doble de puntos |
 
 > Con el power-up "Velocidad" la nave se pinta de cian, sea cual sea la skin.
+>
+> La skin **Morada** es el **doble de grande** que la original y otorga el
+> **doble de puntos** por cada asteroide destruido (incluida la estrella fugaz).
 
 ## Tema claro / oscuro
 

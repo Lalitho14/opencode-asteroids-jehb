@@ -333,6 +333,8 @@ const SKINS = [
     flame: 'rgba(255, 130, 0, 0.85)',
     exhaust: [-8, 0],
     alpha: 1,
+    scale: 1,
+    pointsMult: 1,
   },
   {
     id: 'neon',
@@ -345,6 +347,8 @@ const SKINS = [
     flame: 'rgba(255, 60, 200, 0.9)',
     exhaust: [-8, 0],
     alpha: 1,
+    scale: 1,
+    pointsMult: 1,
   },
   {
     id: 'dorada',
@@ -358,6 +362,8 @@ const SKINS = [
     flame: 'rgba(255, 245, 170, 0.9)',
     exhaust: [-8, 0],
     alpha: 1,
+    scale: 1,
+    pointsMult: 1,
   },
   {
     id: 'delta',
@@ -370,6 +376,8 @@ const SKINS = [
     flame: 'rgba(255, 240, 240, 0.9)',
     exhaust: [-14, 0],
     alpha: 1,
+    scale: 1,
+    pointsMult: 1,
   },
   {
     id: 'ovni',
@@ -385,6 +393,8 @@ const SKINS = [
     flame: 'rgba(200, 255, 200, 0.9)',
     exhaust: [-14, 0],
     alpha: 1,
+    scale: 1,
+    pointsMult: 1,
   },
   {
     id: 'fantasma',
@@ -399,8 +409,30 @@ const SKINS = [
     flameLight: 'rgba(22, 35, 60, 0.7)',
     exhaust: [-11, 0],
     alpha: 0.75,
+    scale: 1,
+    pointsMult: 1,
+  },
+  {
+    id: 'morada',
+    name: 'Morada',
+    desc: 'El doble de grande: el doble de puntos.',
+    hull: [[[20, 0], [-12, -9], [-7, 0], [-12, 9]]],
+    stroke: '#b388ff',
+    strokeLight: '#7c3aed',
+    fill: 'rgba(168, 85, 247, 0.3)',
+    fillLight: 'rgba(124, 58, 237, 0.25)',
+    flame: 'rgba(216, 180, 254, 0.9)',
+    flameLight: 'rgba(124, 58, 237, 0.8)',
+    exhaust: [-8, 0],
+    alpha: 1,
+    scale: 2,        // el doble de grande que la nave original
+    pointsMult: 2,   // el doble de puntos al destruir asteroides
   },
 ];
+
+// Escala y multiplicador de puntos de la skin activa
+function skinScale()      { return SKINS[skinIndex].scale || 1; }
+function skinPointsMult() { return SKINS[skinIndex].pointsMult || 1; }
 
 const BOOST_STROKE = '#8ff3ff';      // color de la nave con el power-up "Velocidad"
 const BOOST_STROKE_LIGHT = '#0b7285';  // el mismo boost sobre el tema claro
@@ -435,6 +467,7 @@ let skinRepeat = 0;   // s hasta la siguiente repetición al mantener la flecha
 function setSkin(i) {
   skinIndex = wrap(i, SKINS.length);
   saveSkinIndex(skinIndex);
+  if (ship) ship.radius = 12 * skinScale();  // recalcular radio si ya hay partida
 }
 
 // Dibuja la nave de una skin en el contexto actual, con el morro hacia +X.
@@ -496,7 +529,7 @@ class Ship {
     this.angle  = -Math.PI / 2;
     this.vx     = 0;
     this.vy     = 0;
-    this.radius = 12;
+    this.radius = 12 * skinScale();  // la skin Morada es el doble de grande
     this.thrusting     = false;
     this.invincible    = 3;
     this.shootCooldown = 0;
@@ -548,7 +581,7 @@ class Ship {
 
   // Crea una bala en la nariz de la nave
   makeBullet() {
-    const NOSE = 21;
+    const NOSE = 21 * skinScale();  // más adelante en naves grandes
     const ox = this.x + Math.cos(this.angle) * NOSE;
     const oy = this.y + Math.sin(this.angle) * NOSE;
     const triple = this.tripleTimer > 0 || this.burstLeft > 0;
@@ -577,7 +610,7 @@ class Ship {
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.angle);
-    drawSkinShip(ctx, SKINS[skinIndex], this.thrusting, 1, this.speedTimer > 0);
+    drawSkinShip(ctx, SKINS[skinIndex], this.thrusting, skinScale(), this.speedTimer > 0);
     ctx.restore();
   }
 
@@ -587,6 +620,7 @@ class Ship {
     const t = performance.now() / 1000;
     const seg = (Math.PI * 2) / SHIELD_MAX_CHARGES;
     const gap = 0.35;   // separación entre arcos
+    const r = SHIELD_RADIUS * skinScale();  // escala con la nave
 
     ctx.save();
     ctx.translate(this.x, this.y);
@@ -596,7 +630,7 @@ class Ship {
     ctx.globalAlpha = 0.55 + 0.25 * Math.sin(t * 5);   // pulso
     for (let i = 0; i < this.shieldCharges; i++) {
       ctx.beginPath();
-      ctx.arc(0, 0, SHIELD_RADIUS, i * seg + gap, (i + 1) * seg - gap);
+      ctx.arc(0, 0, r, i * seg + gap, (i + 1) * seg - gap);
       ctx.stroke();
     }
     ctx.restore();
@@ -952,7 +986,7 @@ function update(dt) {
       if (!a.dead && !b.dead && dist(b, a) < a.radius) {
         b.dead = true;
         a.dead = true;
-        score += a.points;
+        score += a.points * skinPointsMult();  // la skin Morada dobla los puntos
         explode(a.x, a.y, a.size * 5);
         newAsteroids.push(...a.split());
         // Probabilidad de soltar un power-up (como máximo uno por asteroide)
@@ -1029,7 +1063,7 @@ function drawLifeIcon(x, y) {
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(-Math.PI / 2);
-  drawSkinShip(ctx, SKINS[skinIndex], false, 0.45);
+  drawSkinShip(ctx, SKINS[skinIndex], false, 0.45 * skinScale());
   ctx.restore();
 }
 
@@ -1121,11 +1155,11 @@ function drawSkinMenu() {
   ctx.font = 'bold 28px monospace';
   ctx.fillText('ELEGIR SKIN', W / 2, 92);
 
-  // Vista previa de la nave
+  // Vista previa de la nave (respeta la escala de la skin, p. ej. la Morada)
   ctx.save();
   ctx.translate(W / 2, 210);
   ctx.rotate(Math.sin(animTime * 1.2) * 0.45);
-  drawSkinShip(ctx, skin, true, 3);
+  drawSkinShip(ctx, skin, true, 3 * (skin.scale || 1));
   ctx.restore();
 
   // Flechas de navegación
