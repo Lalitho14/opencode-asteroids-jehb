@@ -76,8 +76,9 @@ All state is shared globals:
 ## Issue triage automation
 
 `.github/workflows/issue-triage.yml` runs on `issues: [opened]` (and manually via
-`workflow_dispatch` with an `issue_number` input). It calls
-`.github/scripts/triage-issue.cjs` through `actions/github-script`:
+`workflow_dispatch` with an `issue_number` input). It runs
+`.github/scripts/triage-issue.cjs` with plain `node` (no bundler, no dependencies; the
+script talks to the REST API with the global `fetch`):
 
 - **Never rewrites what the reporter wrote.** The auto-generated section is appended at
   the end of the body between `<!-- triage:auto:start -->` and `<!-- triage:auto:end -->`.
@@ -92,8 +93,13 @@ All state is shared globals:
   accents stripped and matched by whole words, in Spanish and English.
 - Opt out per issue by putting `<!-- triage-skip -->` in the body. Issues opened by
   bots are skipped automatically.
+- Env used by the script: `GITHUB_TOKEN` (auth), `GITHUB_REPOSITORY` (owner/repo),
+  `GITHUB_EVENT_PATH` (evento), `GITHUB_SHA` (commit mostrado), `GITHUB_API_URL` (base
+  de la API, permite probar en local).
 - Needs `issues: write`; if the repo restricts the default `GITHUB_TOKEN` to read-only,
   the workflow cannot apply labels or edit the body.
+- Don't move the script into `actions/github-script`: that action bundles its own
+  `require` and cannot load workspace files reliably (`triage is not a function`).
 
 ## Style
 

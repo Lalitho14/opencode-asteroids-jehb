@@ -3,14 +3,18 @@
 // Triaje automático de issues: formatea el body (sin tocar el texto original),
 // añade labels y deja información útil para quien revise.
 //
-// Uso desde una GitHub Action (actions/github-script):
-//   const triage = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/triage-issue.cjs`);
-//   await triage({ github, context, core });
+// Se ejecuta como script suelto con Node (sin bundler, sin dependencias):
+//   node .github/scripts/triage-issue.cjs
+// Necesita GITHUB_TOKEN, GITHUB_REPOSITORY y (opcionalmente) GITHUB_EVENT_PATH.
+
+const fs = require('fs');
 
 const MARKER_START = '<!-- triage:auto:start -->';
 const MARKER_END = '<!-- triage:auto:end -->';
 const SKIP_MARKER = '<!-- triage-skip -->';
 const MAX_BODY_LENGTH = 60000;
+const API_VERSION = '2022-11-28';
+const USER_AGENT = 'opencode-asteroids-issue-triage';
 
 // ── Labels ──
 // name → { color, description }. Los labels se crean si no existen en el repo.
@@ -38,6 +42,7 @@ const CATEGORY_RULES = [
     label: 'bug',
     keywords: {
       'no funciona': 3, 'no carga': 3, 'no abre': 3, 'no arranca': 3, 'no responde': 2,
+      'no aparece': 2, 'no se ve': 2, 'no se muestra': 2, 'no hace nada': 2, 'desaparece': 2,
       'falla': 2, 'fallo': 2, 'fallos': 2, 'bug': 2, 'error': 2, 'roto': 2, 'rota': 2,
       'rompe': 2, 'crash': 3, 'exception': 2, 'stack trace': 3, 'undefined': 2,
       'se traba': 2, 'se congela': 3, 'se cierra': 2, 'regression': 3, 'problema': 1,
@@ -422,121 +427,227 @@ function replaceBlock(body, block) {
   return body;
 }
 
-// ── Labels ──
+// ── Cliente REST de GitHub ──
+// Sin dependencias: usa el fetch global de Node (18+).
 
-async function ensureLabels(github, owner, repo, labelNames) {
-  const existing = await github.rest.issues.listLabelsOnRepo({ owner, repo, per_page: 100 });
-  const known = new Set((existing.data || []).map((label) => label.name));
+function createApi(options) {
+  const token = options.token;
+  const baseUrl = (options.baseUrl || 'https://api.github.com').replace(/\/$/, '');
+
+  async function request(method, path, payload) {
+    const headers = {
+      'accept': 'application/vnd.github+json',
+      'authorization': `Bearer ${token}`,
+      'x-github-api-version': API_VERSION,
+      'user-agent': USER_AGENT
+    };
+    if (payload) headers['content-type'] = 'application/json';
+
+    const response = await fetch(baseUrl + path, {
+      method,
+      headers,
+      body: payload ? JSON.stringify(payload) : undefined
+    });
+
+    const text = await response.text();
+    let data = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch (error) {
+        data = text;
+      }
+    }
+
+    if (!response.ok) {
+      const detail = typeof data === 'string' ? data.slice(0, 300) : JSON.stringify(data).slice(0, 300);
+      throw new Error(`${method} ${path} → ${response.status} ${response.statusText}: ${detail}`);
+    }
+    return data;
+  }
+
+  return {
+    request,
+    getIssue: (owner, repo, number) => request('GET', `/repos/${owner}/${repo}/issues/${number}`),
+    listLabels: async (owner, repo) => {
+      const labels = [];
+      for (let page = 1; page <= 10; page++) {
+        const data = await request('GET', `/repos/${owner}/${repo}/labels?per_page=100&page=${page}`);
+        labels.push(...(data || []));
+        if (!data || data.length < 100) break;
+      }
+      return labels;
+    },
+    createLabel: (owner, repo, label) => request('POST', `/repos/${owner}/${repo}/labels`, label),
+    addLabels: (owner, repo, number, labels) =>
+      request('POST', `/repos/${owner}/${repo}/issues/${number}/labels`, { labels }),
+    updateIssue: (owner, repo, number, payload) =>
+      request('PATCH', `/repos/${owner}/${repo}/issues/${number}`, payload),
+    createComment: (owner, repo, number, body) =>
+      request('POST', `/repos/${owner}/${repo}/issues/${number}/comments`, { body })
+  };
+}
+
+async function ensureLabels(api, owner, repo, labelNames, log) {
+  let existing = [];
+  try {
+    existing = await api.listLabels(owner, repo);
+  } catch (error) {
+    log(`No se pudieron listar los labels (${error.message}), se intentará crearlos igualmente.`);
+  }
+  const known = new Set((existing || []).map((label) => label.name));
   for (const name of labelNames) {
     if (known.has(name)) continue;
     const meta = LABEL_META[name];
     if (!meta) continue;
     try {
-      await github.rest.issues.createLabel({
-        owner,
-        repo,
+      await api.createLabel(owner, repo, {
         name,
         color: meta.color,
         description: meta.description
       });
       known.add(name);
+      log(`Label creado: ${name}`);
     } catch (error) {
-      // Si el label existe con otro color no fallamos el triage.
+      // Si ya existe (o no hay permisos) no se rompe el triage.
+      log(`No se pudo crear el label ${name}: ${error.message}`);
     }
   }
 }
 
-// ── Entrada principal ──
+// ── Triaje ──
 
-async function triage({ github, context, core }) {
-  const log = (message) => core.info(message);
-  const payload = context.payload || {};
-  const owner = context.repo.owner;
-  const repo = context.repo.repo;
-
-  let issue = payload.issue;
-  if (!issue) {
-    const input = payload.inputs || {};
-    const number = Number(input.issue_number);
-    if (!number) {
-      log('No issue_number provided, nothing to do.');
-      return;
-    }
-    const response = await github.rest.issues.get({ owner, repo, issue_number: number });
-    issue = response.data;
-  }
+async function triage(options) {
+  const { api, issue, owner, repo } = options;
+  const log = options.log || (() => {});
+  const commit = options.commit || '';
 
   if (!issue) {
-    log('Issue not found.');
+    log('No se encontró el issue.');
     return;
   }
 
   if (issue.user && issue.user.type === 'Bot') {
-    log('Issue created by a bot, skipping.');
+    log('Issue creado por un bot, se omite.');
     return;
   }
 
   const body = issue.body || '';
   if (body.includes(SKIP_MARKER)) {
-    log('Issue marked with triage-skip, skipping.');
+    log('Issue marcado con triage-skip, se omite.');
     return;
   }
 
   const info = analyze(issue);
-  log(`Category: ${info.category || 'none'} | Areas: ${info.areas.map((a) => a.label).join(', ') || 'none'} | Priority: ${info.priority || 'none'}`);
-  log(`Labels: ${info.labels.join(', ') || 'none'}`);
+  log(`Categoría: ${info.category || 'ninguna'} | Áreas: ${info.areas.map((a) => a.label).join(', ') || 'ninguna'} | Prioridad: ${info.priority || 'ninguna'}`);
+  log(`Labels: ${info.labels.join(', ') || 'ninguno'}`);
 
-  const block = buildBlock(issue, info, { commit: (process.env.GITHUB_SHA || '').slice(0, 7) });
+  const block = buildBlock(issue, info, { commit });
 
   let newBody;
   if (body.includes(MARKER_START)) {
     newBody = replaceBlock(body, block);
-    log('Existing triage block replaced.');
+    log('Bloque de triaje existente reemplazado.');
   } else {
     const separator = body.trim() ? body.replace(/\s+$/, '') + '\n\n---\n\n' : '';
     newBody = separator + block;
-    log('Triage block appended.');
+    log('Bloque de triaje añadido al final.');
   }
 
   if (newBody.length > MAX_BODY_LENGTH) {
-    log('Body would exceed the GitHub limit, posting as a comment instead.');
-    await github.rest.issues.createComment({
-      owner,
-      repo,
-      issue_number: issue.number,
-      body: block
-    });
+    log('El body superaría el límite de GitHub, se publica como comentario.');
+    await api.createComment(owner, repo, issue.number, block);
   } else if (newBody !== body) {
-    await github.rest.issues.update({
-      owner,
-      repo,
-      issue_number: issue.number,
-      body: newBody
-    });
+    await api.updateIssue(owner, repo, issue.number, { body: newBody });
   }
 
   if (info.labels.length) {
-    await ensureLabels(github, owner, repo, info.labels);
-    await github.rest.issues.addLabels({
-      owner,
-      repo,
-      issue_number: issue.number,
-      labels: info.labels
-    });
+    await ensureLabels(api, owner, repo, info.labels, log);
+    await api.addLabels(owner, repo, issue.number, info.labels);
   } else {
-    log('No labels to apply.');
+    log('No hay labels que aplicar.');
   }
 
-  log('Triage done.');
+  log('Triaje completado.');
+}
+
+// ── Ejecución desde la Action ──
+
+function readEvent() {
+  const path = process.env.GITHUB_EVENT_PATH;
+  if (!path) return {};
+  try {
+    return JSON.parse(fs.readFileSync(path, 'utf8'));
+  } catch (error) {
+    console.warn(`No se pudo leer el evento (${error.message}).`);
+    return {};
+  }
+}
+
+function resolveRepo(event) {
+  const slug = process.env.GITHUB_REPOSITORY || '';
+  const [slugOwner, slugRepo] = slug.split('/');
+  if (event.repository && event.repository.owner) {
+    return { owner: event.repository.owner.login, repo: event.repository.name };
+  }
+  return { owner: slugOwner, repo: slugRepo };
+}
+
+function resolveIssueNumber(event) {
+  if (event.issue && event.issue.number) return event.issue.number;
+  const inputs = event.inputs || {};
+  const value = Number(inputs.issue_number);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+async function main() {
+  const log = (message) => console.log(`[triage] ${message}`);
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) {
+    throw new Error('Falta la variable GITHUB_TOKEN en el entorno de la Action.');
+  }
+
+  const event = readEvent();
+  const { owner, repo } = resolveRepo(event);
+  if (!owner || !repo) {
+    throw new Error('No se pudo deducir owner/repo del repositorio.');
+  }
+
+  const number = resolveIssueNumber(event);
+  if (!number) {
+    log('El evento no indica ningún issue que triar.');
+    return;
+  }
+
+  const api = createApi({ token, baseUrl: process.env.GITHUB_API_URL || 'https://api.github.com' });
+  log(`Triando el issue #${number} de ${owner}/${repo}`);
+  const issue = await api.getIssue(owner, repo, number);
+
+  await triage({
+    api,
+    issue,
+    owner,
+    repo,
+    commit: (process.env.GITHUB_SHA || '').slice(0, 7),
+    log
+  });
 }
 
 module.exports = {
   triage,
   analyze,
   buildBlock,
+  createApi,
   normalize,
   detectLanguage,
   LABEL_META,
   MARKER_START,
   MARKER_END
 };
+
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(`[triage] Error: ${error && error.message ? error.message : error}`);
+    process.exit(1);
+  });
+}
