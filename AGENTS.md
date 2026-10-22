@@ -10,9 +10,11 @@ dependencies, zero build step:
 - `game.js` — the entire game (~420 lines): input, entity classes, state machine,
   update/draw loop.
 - `favicon.svg`, `README.md` (Spanish product spec).
+- `.github/workflows/` — CI: `opencode.yml` (bot en comentarios) and `issue-triage.yml`
+  (triaje de issues). `.github/scripts/triage-issue.cjs` — lógica del triaje.
 
-There is no `package.json`, lockfile, test runner, linter, formatter, CI workflow, or
-`opencode.json`.
+There is no `package.json`, lockfile, test runner, linter, formatter, or
+`opencode.json`. The only workflows are the two GitHub Actions above.
 
 ## Running and verification
 
@@ -70,6 +72,28 @@ All state is shared globals:
   theme; without them the base color is used.
 - The README is currently in sync with the code (power-ups and the "estrella fugaz"
   are implemented). If you add a feature, update both in the same commit.
+
+## Issue triage automation
+
+`.github/workflows/issue-triage.yml` runs on `issues: [opened]` (and manually via
+`workflow_dispatch` with an `issue_number` input). It calls
+`.github/scripts/triage-issue.cjs` through `actions/github-script`:
+
+- **Never rewrites what the reporter wrote.** The auto-generated section is appended at
+  the end of the body between `<!-- triage:auto:start -->` and `<!-- triage:auto:end -->`.
+  If the markers are already present the whole block is replaced (idempotent).
+- Adds a Spanish summary table (author, date, commit, language, category, areas,
+  priority), the detected signals (steps / environment / screenshot / code) and a
+  reviewer checklist with the likely files to look at.
+- Applies labels: category (`bug`, `enhancement`, `question`, `documentation`), area
+  (`gameplay`, `ui`, `controls`, `performance`, `skins`), `needs-info` and
+  `priority: high|medium|low`. Labels are created on demand with a fixed color.
+- Classification is **deterministic keyword scoring** (no LLM): text is lowercased,
+  accents stripped and matched by whole words, in Spanish and English.
+- Opt out per issue by putting `<!-- triage-skip -->` in the body. Issues opened by
+  bots are skipped automatically.
+- Needs `issues: write`; if the repo restricts the default `GITHUB_TOKEN` to read-only,
+  the workflow cannot apply labels or edit the body.
 
 ## Style
 
